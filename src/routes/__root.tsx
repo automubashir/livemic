@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
+      { title: "VoxFX — Live Voice Effects on Your Phone" },
       { name: "description", content: "VoxFX turns your phone into a live voice-effects pedal — reverb, echo, pitch and distortion routed to your speaker or Bluetooth headphones with ultra-low latency." },
       { name: "author", content: "Lovable" },
       { name: "theme-color", content: "#0b0b12" },
