@@ -81,11 +81,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "VoxFX turns your phone into a live voice-effects pedal — reverb, echo, pitch and distortion routed to your speaker or Bluetooth headphones with ultra-low latency." },
       { name: "author", content: "Lovable" },
       { name: "theme-color", content: "#0b0b12" },
-      { property: "og:title", content: "VoxFX — Live Voice Effects" },
-      { property: "og:description", content: "Turn your phone into a real-time voice effects pedal. Reverb, echo, pitch, distortion — routed to your Bluetooth or wired speaker." },
+      { property: "og:title", content: "VoxFX — Live Voice Effects on Your Phone" },
+      { property: "og:description", content: "VoxFX turns your phone into a live voice-effects pedal — reverb, echo, pitch and distortion routed to your speaker or Bluetooth headphones with ultra-low latency." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "VoxFX — Live Voice Effects on Your Phone" },
+      { name: "twitter:description", content: "VoxFX turns your phone into a live voice-effects pedal — reverb, echo, pitch and distortion routed to your speaker or Bluetooth headphones with ultra-low latency." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/450400e6-4689-469b-b56e-a8bf9a6024ea" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/450400e6-4689-469b-b56e-a8bf9a6024ea" },
     ],
     links: [
       {
