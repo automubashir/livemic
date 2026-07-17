@@ -99,11 +99,9 @@ export class VoxFXEngine {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
-        // @ts-expect-error non-standard hints, but Chrome honors them
         latency: 0,
-        // @ts-expect-error
         channelCount: 1,
-      },
+      } as MediaTrackConstraints,
       video: false,
     });
     this.stream = stream;
