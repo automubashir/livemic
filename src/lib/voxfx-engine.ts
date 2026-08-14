@@ -16,7 +16,7 @@ export type EngineParams = {
 };
 
 export const defaultParams: EngineParams = {
-  inputGain: 1,
+  inputGain: 0.2,
   outputGain: 1,
   wet: 0.6,
   reverb: 0.35,
@@ -29,16 +29,36 @@ export const defaultParams: EngineParams = {
 
 export type EnginePreset = {
   name: string;
-  params: Partial<EngineParams>;
+  group: "Speech" | "Singing" | "Karaoke" | "FX";
+  hint: string;
+  params: Omit<Partial<EngineParams>, "inputGain">;
 };
 
 export const presets: EnginePreset[] = [
-  { name: "Clean", params: { wet: 0, reverb: 0, delayTime: 0, delayFeedback: 0, distortion: 0 } },
-  { name: "Hall", params: { wet: 0.7, reverb: 0.7, delayTime: 0.02, delayFeedback: 0.1, distortion: 0 } },
-  { name: "Echo", params: { wet: 0.55, reverb: 0.2, delayTime: 0.28, delayFeedback: 0.45, distortion: 0 } },
-  { name: "Stadium", params: { wet: 0.8, reverb: 0.9, delayTime: 0.35, delayFeedback: 0.5, distortion: 0 } },
-  { name: "Robot", params: { wet: 0.7, reverb: 0.1, delayTime: 0.01, delayFeedback: 0.6, distortion: 0.55 } },
-  { name: "Megaphone", params: { wet: 0.9, reverb: 0.05, delayTime: 0, delayFeedback: 0, distortion: 0.7, hpf: 350 } },
+  // Speech
+  { name: "Clean", group: "Speech", hint: "Dry voice, no effects", params: { wet: 0, reverb: 0, delayTime: 0, delayFeedback: 0, distortion: 0, hpf: 90 } },
+  { name: "Podcast", group: "Speech", hint: "Warm, tight, radio-ready", params: { wet: 0.2, reverb: 0.12, delayTime: 0.012, delayFeedback: 0.05, distortion: 0.05, hpf: 110 } },
+  { name: "Announcer", group: "Speech", hint: "Big room PA voice", params: { wet: 0.45, reverb: 0.4, delayTime: 0.05, delayFeedback: 0.12, distortion: 0.08, hpf: 130 } },
+
+  // Singing
+  { name: "Studio Vocal", group: "Singing", hint: "Short plate, polished", params: { wet: 0.35, reverb: 0.3, delayTime: 0.02, delayFeedback: 0.08, distortion: 0, hpf: 100 } },
+  { name: "Pop Sheen", group: "Singing", hint: "Slap-back + air", params: { wet: 0.45, reverb: 0.35, delayTime: 0.09, delayFeedback: 0.2, distortion: 0.03, hpf: 120 } },
+  { name: "Ballad Hall", group: "Singing", hint: "Lush, long tail", params: { wet: 0.6, reverb: 0.72, delayTime: 0.03, delayFeedback: 0.1, distortion: 0, hpf: 95 } },
+  { name: "R&B Silk", group: "Singing", hint: "Smooth, intimate", params: { wet: 0.4, reverb: 0.28, delayTime: 0.14, delayFeedback: 0.18, distortion: 0, hpf: 105 } },
+  { name: "Rock Grit", group: "Singing", hint: "Driven & aggressive", params: { wet: 0.5, reverb: 0.25, delayTime: 0.11, delayFeedback: 0.22, distortion: 0.4, hpf: 140 } },
+  { name: "Gospel Choir", group: "Singing", hint: "Huge church space", params: { wet: 0.7, reverb: 0.85, delayTime: 0.06, delayFeedback: 0.18, distortion: 0, hpf: 90 } },
+
+  // Karaoke
+  { name: "Karaoke Std", group: "Karaoke", hint: "Classic mic echo", params: { wet: 0.5, reverb: 0.4, delayTime: 0.16, delayFeedback: 0.3, distortion: 0, hpf: 120 } },
+  { name: "Party Room", group: "Karaoke", hint: "Loud, roomy, fun", params: { wet: 0.65, reverb: 0.6, delayTime: 0.22, delayFeedback: 0.38, distortion: 0.1, hpf: 130 } },
+  { name: "Concert", group: "Karaoke", hint: "Arena-size vocal", params: { wet: 0.75, reverb: 0.9, delayTime: 0.3, delayFeedback: 0.42, distortion: 0.05, hpf: 110 } },
+  { name: "Dream Echo", group: "Karaoke", hint: "Floaty repeats", params: { wet: 0.7, reverb: 0.55, delayTime: 0.4, delayFeedback: 0.55, distortion: 0, hpf: 100 } },
+
+  // FX
+  { name: "Stadium", group: "FX", hint: "Massive slap-back", params: { wet: 0.8, reverb: 0.9, delayTime: 0.35, delayFeedback: 0.5, distortion: 0, hpf: 90 } },
+  { name: "Robot", group: "FX", hint: "Metallic comb tone", params: { wet: 0.7, reverb: 0.1, delayTime: 0.01, delayFeedback: 0.6, distortion: 0.55, hpf: 150 } },
+  { name: "Megaphone", group: "FX", hint: "Thin & distorted", params: { wet: 0.9, reverb: 0.05, delayTime: 0, delayFeedback: 0, distortion: 0.7, hpf: 350 } },
+  { name: "Cave", group: "FX", hint: "Dark endless space", params: { wet: 0.85, reverb: 0.95, delayTime: 0.5, delayFeedback: 0.65, distortion: 0, hpf: 70 } },
 ];
 
 function makeDistortionCurve(amount: number) {
