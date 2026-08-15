@@ -1,246 +1,404 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { VoxFXEngine, defaultParams, presets, groupOrder, groupNotes, type EngineParams } from "@/lib/voxfx-engine";
-import { useWakeLock } from "@/hooks/use-wake-lock";
+import { useState, type ReactNode } from "react";
 
+import { Diagnostics } from "@/components/voxfx/diagnostics";
+import { EffectsRack } from "@/components/voxfx/effects-rack";
+import { Fader } from "@/components/voxfx/fader";
+import { LevelMeter } from "@/components/voxfx/level-meter";
+import { DeviceSelect, Panel, Toggle } from "@/components/voxfx/panel";
+import { PresetBrowser } from "@/components/voxfx/preset-browser";
+import { useVoxFX } from "@/hooks/use-voxfx";
+import { useWakeLock } from "@/hooks/use-wake-lock";
+import type { EngineSnapshot } from "@/lib/audio/engine";
+import { PARAM_RANGES } from "@/lib/audio/params";
+
+// Page metadata is static and lives in index.html so crawlers get it without
+// executing any JavaScript.
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "VoxFX — Live Mic Effects, Reverb & Karaoke Presets" },
-      { name: "description", content: "Turn your phone into a live vocal pedal: studio, singing and karaoke presets with reverb, echo and drive, streamed to your speaker or Bluetooth with low latency." },
-      { property: "og:title", content: "VoxFX — Live Mic Effects, Reverb & Karaoke Presets" },
-      { property: "og:description", content: "Live vocal effects on your phone: singing and karaoke presets, reverb, echo and drive with low-latency monitoring." },
-    ],
-  }),
   component: Index,
 });
 
 function Index() {
-  const engineRef = useRef<VoxFXEngine | null>(null);
-  const [running, setRunning] = useState(false);
-  const [params, setParams] = useState<EngineParams>(defaultParams);
-  const [error, setError] = useState<string | null>(null);
-  const [latencyMs, setLatencyMs] = useState<number>(0);
-  const [warned, setWarned] = useState(false);
-  const [activePreset, setActivePreset] = useState<string>("Clean");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const wakeLock = useWakeLock(running);
-
-  useEffect(() => {
-    return () => {
-      engineRef.current?.stop();
-    };
-  }, []);
-
-  const start = useCallback(async () => {
-    setError(null);
-    try {
-      const engine = engineRef.current ?? new VoxFXEngine();
-      engineRef.current = engine;
-      engine.update(params);
-      await engine.start();
-      engine.update(params);
-      setLatencyMs(engine.latencyMs);
-      setRunning(true);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(`Could not start: ${msg}. Grant microphone permission and try again.`);
-    }
-  }, [params]);
-
-  const stop = useCallback(async () => {
-    await engineRef.current?.stop();
-    setRunning(false);
-  }, []);
-
-  const patch = useCallback((next: Partial<EngineParams>) => {
-    setParams((prev) => {
-      const merged = { ...prev, ...next };
-      engineRef.current?.update(next);
-      return merged;
-    });
-  }, []);
-
-  const applyPreset = (i: number) => {
-    const p = presets[i];
-    setActivePreset(p.name);
-    setParams((prev) => {
-      // Input gain is a mic-level control and stays independent of presets.
-      const merged = { ...defaultParams, ...p.params, inputGain: prev.inputGain, outputGain: prev.outputGain };
-      engineRef.current?.update(merged);
-      return merged;
-    });
-  };
-
-  const groups = useMemo(() => {
-    return groupOrder.map((g) => ({
-      name: g,
-      note: groupNotes[g],
-      items: presets.map((p, i) => ({ p, i })).filter((x) => x.p.group === g),
-    }));
-  }, []);
+  const vx = useVoxFX();
+  const s = vx.snapshot;
+  const live = s.status === "live";
+  const busy = s.status === "initializing" || s.status === "stopping";
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  useWakeLock(live);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#07070d] text-white">
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-[36rem] -translate-x-1/2 rounded-full bg-fuchsia-600/20 blur-[120px]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-cyan-500/10 blur-[120px]" />
+    <div className="min-h-screen bg-vx-bg text-vx-text antialiased">
+      <Header snapshot={s} />
 
-      <div className="relative mx-auto flex min-h-screen max-w-md flex-col px-5 pt-7 pb-28">
-        <header className="mb-5 flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">
-              Vox<span className="bg-gradient-to-r from-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">FX</span>
-            </h1>
-            <p className="mt-0.5 text-xs text-white/45">Live vocal pedal — mic → speaker</p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium tracking-wide ${
-                running
-                  ? "bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30"
-                  : "bg-white/5 text-white/45 ring-1 ring-white/10"
-              }`}
+      <main className="mx-auto max-w-[1400px] px-3 pb-32 pt-3 sm:px-4">
+        {!noticeDismissed && <FeedbackNotice onDismiss={() => setNoticeDismissed(true)} />}
+        {s.error && <ErrorNotice snapshot={s} onDismiss={vx.clearError} />}
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[300px_minmax(0,1fr)_330px] xl:items-start">
+          <div className="space-y-3">
+            <Panel
+              title="Input"
+              meta={
+                <span className="truncate text-[10px] text-vx-dim">
+                  {s.inputDeviceLabel ?? (live ? "Default microphone" : "not open")}
+                </span>
+              }
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${running ? "animate-pulse bg-emerald-400" : "bg-white/40"}`} />
-              {running ? `LIVE · ~${latencyMs || "?"} ms` : "IDLE"}
-            </span>
-            {running && (
-              <span className="text-[9px] text-white/35">
-                {wakeLock.supported ? (wakeLock.held ? "screen kept awake" : "wake lock pending") : "wake lock unsupported"}
-              </span>
-            )}
-          </div>
-        </header>
+              <LevelMeter engine={vx.engine} channel="input" label="Mic level" />
+              <div className="mt-4">
+                <Fader
+                  label="Input gain"
+                  value={s.params.inputGain}
+                  {...PARAM_RANGES.inputGain}
+                  onChange={(v) => vx.setParam("inputGain", v)}
+                  format={(v) => `${v.toFixed(2)}×`}
+                  resetTo={1}
+                />
+              </div>
 
-        {!warned && (
-          <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-200">
-            <strong className="block text-amber-100">Use headphones or a distant Bluetooth speaker.</strong>
-            Playing the mic through the phone's own speaker will cause feedback squeal.
-            <button
-              onClick={() => setWarned(true)}
-              className="mt-2 rounded-md bg-amber-300/20 px-2 py-1 text-[11px] font-medium text-amber-100 hover:bg-amber-300/30"
+              {s.deviceSelectionSupported && (
+                <div className="mt-4">
+                  <DeviceSelect
+                    label="Microphone"
+                    value={s.inputDeviceId ?? ""}
+                    options={s.inputDevices}
+                    onChange={(id) => void vx.setInputDevice(id || null)}
+                    emptyLabel="System default"
+                  />
+                  {s.permission !== "granted" && s.inputDevices.length === 0 && (
+                    <p className="mt-1 text-[10px] leading-tight text-vx-faint">
+                      Device names appear after microphone access is granted.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-4 border-t border-vx-line pt-2">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-vx-faint">
+                  Browser mic processing
+                </p>
+                <p className="mb-1.5 text-[10px] leading-snug text-vx-faint">
+                  Off by default for live effects — these are voice-call algorithms that fight
+                  intentional reverb and echo.
+                </p>
+                <Toggle
+                  label="Echo cancellation"
+                  description="Suppresses sound the browser thinks is feedback."
+                  checked={s.micProcessing.echoCancellation}
+                  onChange={(v) => void vx.setMicProcessing({ echoCancellation: v })}
+                />
+                <Toggle
+                  label="Noise suppression"
+                  description="Removes steady background noise."
+                  checked={s.micProcessing.noiseSuppression}
+                  onChange={(v) => void vx.setMicProcessing({ noiseSuppression: v })}
+                />
+                <Toggle
+                  label="Auto gain control"
+                  description="Lets the browser ride your input level."
+                  checked={s.micProcessing.autoGainControl}
+                  onChange={(v) => void vx.setMicProcessing({ autoGainControl: v })}
+                />
+              </div>
+            </Panel>
+
+            <Panel
+              title="Output"
+              meta={<span className="truncate text-[10px] text-vx-dim">{s.outputDeviceLabel}</span>}
             >
-              Got it
-            </button>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
-            {error}
-          </div>
-        )}
-
-        {/* Levels — independent of presets */}
-        <section className="mb-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">Levels</span>
-            <span className="text-[10px] text-white/30">independent of presets</span>
-          </div>
-          <Knob label="Input Gain (mic)" value={params.inputGain} min={0} max={2} step={0.01} onChange={(v) => patch({ inputGain: v })} format={(v) => `${v.toFixed(2)}×`} />
-          <div className="h-4" />
-          <Knob label="Output Volume" value={params.outputGain} min={0} max={2} step={0.01} onChange={(v) => patch({ outputGain: v })} format={(v) => `${v.toFixed(2)}×`} />
-        </section>
-
-        <section className="mb-5 space-y-5">
-          {groups.map((g) => (
-            <div key={g.name}>
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">{g.name}</span>
-                <span className="h-px flex-1 bg-white/10" />
+              <LevelMeter engine={vx.engine} channel="output" label="Output level" />
+              <div className="mt-4">
+                <Fader
+                  label="Output level"
+                  value={s.params.outputGain}
+                  {...PARAM_RANGES.outputGain}
+                  onChange={(v) => vx.setParam("outputGain", v)}
+                  format={(v) => `${v.toFixed(2)}×`}
+                  resetTo={1}
+                />
               </div>
-              <p className="mb-2 text-[10px] text-white/30">{g.note}</p>
-              <div className="grid grid-cols-2 gap-2">
-                {g.items.map(({ p, i }) => {
-                  const active = activePreset === p.name;
-                  return (
-                    <button
-                      key={p.name}
-                      onClick={() => applyPreset(i)}
-                      className={`rounded-xl border px-3 py-2.5 text-left transition ${
-                        active
-                          ? "border-fuchsia-400/50 bg-gradient-to-br from-fuchsia-500/20 to-cyan-400/10 shadow-[0_0_0_1px_rgba(232,121,249,0.25)]"
-                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.07]"
-                      }`}
-                    >
-                      <div className={`text-[13px] font-semibold ${active ? "text-white" : "text-white/85"}`}>{p.name}</div>
-                      <div className="mt-0.5 text-[10px] leading-tight text-white/40">{p.hint}</div>
-                    </button>
-                  );
-                })}
+
+              <button
+                type="button"
+                onClick={() => vx.setMuted(!s.muted)}
+                aria-pressed={s.muted}
+                className={`mt-3 w-full rounded border py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                  s.muted
+                    ? "border-vx-live/50 bg-vx-live/15 text-vx-live"
+                    : "border-vx-line bg-vx-raise/50 text-vx-dim hover:text-vx-text"
+                }`}
+              >
+                {s.muted ? "Muted" : "Mute output"}
+              </button>
+
+              <div className="mt-4">
+                {s.sinkIdSupported ? (
+                  <>
+                    <DeviceSelect
+                      label="Output device"
+                      value={s.outputDeviceId ?? ""}
+                      options={s.outputDevices}
+                      onChange={(id) => void vx.setOutputDevice(id || null)}
+                      emptyLabel="System default (lowest latency)"
+                    />
+                    {s.outputRoute === "element" && (
+                      <p className="mt-1 text-[10px] leading-tight text-vx-faint">
+                        Routed through a media element to reach the chosen device. This adds a
+                        little latency — pick “System default” for the tightest monitoring.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[10px] leading-snug text-vx-faint">
+                    This browser does not support choosing an output device from a web page. Audio
+                    follows your system route — change it from your device's audio menu (speaker,
+                    Bluetooth or wired).
+                  </p>
+                )}
               </div>
-            </div>
-          ))}
-        </section>
 
-        <section className="rounded-2xl border border-white/10 bg-white/[0.03]">
-          <button
-            onClick={() => setShowAdvanced((s) => !s)}
-            className="flex w-full items-center justify-between px-4 py-3.5"
-          >
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">Fine tune</span>
-            <span className="text-xs text-white/40">{showAdvanced ? "Hide −" : "Show +"}</span>
-          </button>
-          {showAdvanced && (
-            <div className="space-y-4 border-t border-white/10 px-4 py-4">
-              <Knob label="Effect Amount" value={params.wet} min={0} max={1} step={0.01} onChange={(v) => patch({ wet: v })} format={(v) => `${Math.round(v * 100)}%`} />
-              <Knob label="Reverb Level" value={params.reverb} min={0} max={1} step={0.01} onChange={(v) => patch({ reverb: v })} format={(v) => `${Math.round(v * 100)}%`} />
-              <Knob label="Reverb Size" value={params.reverbSize} min={0} max={1} step={0.01} onChange={(v) => patch({ reverbSize: v })} format={(v) => `${Math.round(v * 100)}%`} />
-              <Knob label="Echo Level (0 = off)" value={params.delayMix} min={0} max={1} step={0.01} onChange={(v) => patch({ delayMix: v })} format={(v) => (v === 0 ? "off" : `${Math.round(v * 100)}%`)} />
-              <Knob label="Echo Time" value={params.delayTime} min={0} max={1} step={0.005} onChange={(v) => patch({ delayTime: v })} format={(v) => `${Math.round(v * 1000)} ms`} />
-              <Knob label="Echo Repeats" value={params.delayFeedback} min={0} max={0.85} step={0.01} onChange={(v) => patch({ delayFeedback: v })} format={(v) => `${Math.round(v * 100)}%`} />
-              <Knob label="Distortion" value={params.distortion} min={0} max={1} step={0.01} onChange={(v) => patch({ distortion: v })} format={(v) => `${Math.round(v * 100)}%`} />
-              <Knob label="Low-cut (anti-feedback)" value={params.hpf} min={40} max={600} step={5} onChange={(v) => patch({ hpf: v })} format={(v) => `${Math.round(v)} Hz`} />
-            </div>
-          )}
-        </section>
+              <div className="mt-4 border-t border-vx-line pt-2">
+                <Toggle
+                  label="Output limiter"
+                  description="Catches peaks just below clipping."
+                  checked={s.limiterEnabled}
+                  onChange={vx.setLimiterEnabled}
+                />
+              </div>
+            </Panel>
+          </div>
 
-        <p className="mt-6 text-center text-[11px] leading-relaxed text-white/35">
-          Output follows your phone's audio route (speaker / Bluetooth / wired).
-          Change it from your device's audio menu.
-        </p>
-      </div>
+          <div className="space-y-3">
+            <PresetBrowser activeId={s.presetId} dirty={s.presetDirty} onSelect={vx.selectPreset} />
+          </div>
 
-      {/* Sticky transport */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-white/10 bg-[#07070d]/85 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
-        <div className="mx-auto max-w-md">
-          <button
-            onClick={running ? stop : start}
-            className={`h-14 w-full rounded-2xl text-base font-semibold tracking-wide shadow-lg transition active:scale-[0.99] ${
-              running
-                ? "bg-red-500/90 text-white hover:bg-red-500"
-                : "bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black hover:opacity-90"
-            }`}
-          >
-            {running ? "Stop Microphone" : "Start Microphone"}
-          </button>
+          <div className="space-y-3 md:col-span-2 xl:col-span-1">
+            <EffectsRack
+              params={s.params}
+              dry={s.dry}
+              onChange={vx.setParam}
+              onToggleBypass={vx.toggleFxBypass}
+            />
+            <Diagnostics engine={vx.engine} snapshot={s} />
+            <p className="px-1 text-[10px] leading-relaxed text-vx-faint">
+              Reverb and echo are independent sends. When a preset sets them to zero the effect
+              branch is physically disconnected from the signal path — not just turned down.
+            </p>
+          </div>
         </div>
+      </main>
+
+      <Transport
+        snapshot={s}
+        live={live}
+        busy={busy}
+        onToggle={() => void vx.toggle()}
+        onMute={() => vx.setMuted(!s.muted)}
+      />
+    </div>
+  );
+}
+
+function Header({ snapshot: s }: { snapshot: EngineSnapshot }) {
+  const live = s.status === "live";
+  return (
+    <header className="sticky top-0 z-20 border-b border-vx-line bg-vx-bg/90 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-7 w-7 place-items-center rounded border border-vx-line-strong bg-vx-raise text-[11px] font-bold tracking-tight text-vx-accent">
+            VX
+          </span>
+          <div className="leading-none">
+            <h1 className="text-[15px] font-semibold tracking-tight">VoxFX</h1>
+            <p className="mt-0.5 text-[10px] text-vx-faint">Live vocal processor</p>
+          </div>
+        </div>
+
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Chip tone={live ? "live" : "idle"}>
+            {live ? (
+              <>
+                <span className="vx-pulse mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-vx-live align-middle" />
+                LIVE
+              </>
+            ) : (
+              "MIC OFF"
+            )}
+          </Chip>
+
+          <Chip tone={s.dry ? "ok" : "accent"}>
+            {s.dry ? "DRY SIGNAL" : s.activeEffectNames.join(" · ").toUpperCase()}
+          </Chip>
+
+          <Chip tone="idle" className="hidden sm:inline-flex">
+            {describeLatency(s)}
+          </Chip>
+
+          <Chip tone="idle" className="hidden max-w-[200px] truncate md:inline-flex">
+            Output: {s.outputDeviceLabel}
+          </Chip>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Chip({
+  children,
+  tone,
+  className = "",
+}: {
+  children: ReactNode;
+  tone: "live" | "idle" | "ok" | "accent";
+  className?: string;
+}) {
+  const tones = {
+    live: "bg-vx-live/12 text-vx-live ring-vx-live/30",
+    idle: "bg-vx-raise/60 text-vx-dim ring-vx-line",
+    ok: "bg-vx-ok/12 text-vx-ok ring-vx-ok/30",
+    accent: "bg-vx-accent/12 text-vx-accent ring-vx-accent/30",
+  } as const;
+  return (
+    <span
+      className={`inline-flex items-center rounded px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.14em] ring-1 ring-inset ${tones[tone]} ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function describeLatency(s: EngineSnapshot): string {
+  if (s.status !== "live") return "Interactive latency requested";
+  const total =
+    s.baseLatencyMs === null && s.outputLatencyMs === null
+      ? null
+      : (s.baseLatencyMs ?? 0) + (s.outputLatencyMs ?? 0);
+  if (total === null) return "Low-latency monitoring";
+  return `Low-latency monitoring · ~${total} ms reported`;
+}
+
+function FeedbackNotice({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="mb-3 rounded-lg border border-vx-warn/25 bg-vx-warn/[0.06] p-3.5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-vx-warn">
+            Before you go live
+          </h2>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-vx-dim">
+            Use headphones, or keep the speaker well away from the microphone. If the mic can hear
+            the speaker, the sound loops back into itself and builds into a howl. That is{" "}
+            <strong className="font-semibold text-vx-text">acoustic feedback</strong> — it happens
+            in the room, not in the app, and no software setting can remove it while the loop
+            exists. Lowering output level, moving the speaker, or switching to headphones will.
+          </p>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-vx-faint">
+            Repeats you hear with a dry preset selected and the DRY SIGNAL badge lit are not
+            produced by this processor — check the Audio Diagnostics panel for what is actually
+            active.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 rounded border border-vx-line bg-vx-raise/60 px-2.5 py-1 text-[10px] font-medium text-vx-dim hover:text-vx-text"
+        >
+          Dismiss
+        </button>
       </div>
     </div>
   );
 }
 
-function Knob({
-  label, value, min, max, step, onChange, format,
+function ErrorNotice({
+  snapshot: s,
+  onDismiss,
 }: {
-  label: string; value: number; min: number; max: number; step: number;
-  onChange: (v: number) => void; format: (v: number) => string;
+  snapshot: EngineSnapshot;
+  onDismiss: () => void;
 }) {
+  if (!s.error) return null;
   return (
-    <label className="block">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-xs text-white/70">{label}</span>
-        <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[11px] tabular-nums text-white/60">{format(value)}</span>
+    <div role="alert" className="mb-3 rounded-lg border border-vx-live/30 bg-vx-live/[0.07] p-3.5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-vx-live">
+            {s.error.kind === "permission-denied" ? "Microphone access required" : "Audio problem"}
+          </h2>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-vx-text">{s.error.message}</p>
+          {s.error.hint && (
+            <p className="mt-1 text-[11.5px] leading-relaxed text-vx-dim">{s.error.hint}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 rounded border border-vx-line bg-vx-raise/60 px-2.5 py-1 text-[10px] font-medium text-vx-dim hover:text-vx-text"
+        >
+          Dismiss
+        </button>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-fuchsia-400"
-      />
-    </label>
+    </div>
+  );
+}
+
+function Transport({
+  snapshot: s,
+  live,
+  busy,
+  onToggle,
+  onMute,
+}: {
+  snapshot: EngineSnapshot;
+  live: boolean;
+  busy: boolean;
+  onToggle: () => void;
+  onMute: () => void;
+}) {
+  const denied = s.permission === "denied";
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-vx-line bg-vx-bg/95 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-4">
+        <div className="hidden min-w-0 flex-1 sm:block">
+          <p className="truncate text-[11px] font-medium text-vx-text">
+            {live ? "Monitoring live" : denied ? "Microphone blocked" : "Ready"}
+          </p>
+          <p className="truncate text-[10px] text-vx-faint">
+            {live
+              ? `${s.dry ? "Dry signal" : s.activeEffectNames.join(", ")} · ${s.outputDeviceLabel}`
+              : denied
+                ? "Allow the microphone in your browser's site settings, then start again."
+                : "Allow microphone access to start live monitoring."}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onMute}
+          aria-pressed={s.muted}
+          disabled={!live}
+          className={`hidden h-12 shrink-0 rounded-lg border px-4 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors disabled:opacity-40 sm:block ${
+            s.muted
+              ? "border-vx-live/50 bg-vx-live/15 text-vx-live"
+              : "border-vx-line bg-vx-raise/60 text-vx-dim hover:text-vx-text"
+          }`}
+        >
+          {s.muted ? "Unmute" : "Mute"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={busy}
+          className={`h-12 flex-1 rounded-lg text-[13px] font-semibold uppercase tracking-[0.12em] transition-colors disabled:opacity-60 sm:max-w-[260px] ${
+            live
+              ? "bg-vx-live text-black hover:brightness-110"
+              : "bg-vx-accent text-black hover:brightness-110"
+          }`}
+        >
+          {busy ? "Working…" : live ? "Stop microphone" : "Start microphone"}
+        </button>
+      </div>
+    </div>
   );
 }
