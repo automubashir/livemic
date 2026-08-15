@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# Requires Settings -> Pages -> Source = "GitHub Actions". While the source is
+# still "Deploy from a branch", Pages serves the repository root (an index.html
+# that points at /src/main.tsx) and the deploy step below is rejected.
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let one deployment finish rather than cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      # Not `npm ci`: @tailwindcss/oxide-wasm32-wasi ships bundled deps whose
+      # resolved versions drift from the lockfile, and ci treats that as a
+      # fatal out-of-sync error. `install` honours the lock where it can.
+      - run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+        env:
+          # A project site lives at /<repo>/, so the bundle needs that prefix
+          # baked in. base_path is "" for a user site or a custom domain, which
+          # vite.config.ts resolves back to "/".
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

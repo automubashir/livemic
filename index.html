@@ -19,7 +19,10 @@
       property="og:description"
       content="Live vocal effects in the browser: singing and karaoke presets, reverb, echo and drive with low-latency monitoring."
     />
-    <meta property="og:image" content="/icon-512.png" />
+    <!-- Absolute: crawlers do not resolve these against the page, and Vite only
+         rewrites href/src attributes for the base path, never meta content. -->
+    <meta property="og:image" content="https://automubashir.github.io/livemic/icon-512.png" />
+    <meta property="og:url" content="https://automubashir.github.io/livemic/" />
 
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="VoxFX — Live Mic Effects, Reverb & Karaoke Presets" />
@@ -27,7 +30,7 @@
       name="twitter:description"
       content="Live vocal effects in the browser: singing and karaoke presets, reverb, echo and drive with low-latency monitoring."
     />
-    <meta name="twitter:image" content="/icon-512.png" />
+    <meta name="twitter:image" content="https://automubashir.github.io/livemic/icon-512.png" />
 
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
