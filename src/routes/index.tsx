@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { VoxFXEngine, defaultParams, presets, type EngineParams } from "@/lib/voxfx-engine";
+import { VoxFXEngine, defaultParams, presets, groupOrder, groupNotes, type EngineParams } from "@/lib/voxfx-engine";
 import { useWakeLock } from "@/hooks/use-wake-lock";
 
 export const Route = createFileRoute("/")({
@@ -73,9 +73,9 @@ function Index() {
   };
 
   const groups = useMemo(() => {
-    const order = ["Speech", "Singing", "Karaoke", "FX"] as const;
-    return order.map((g) => ({
+    return groupOrder.map((g) => ({
       name: g,
+      note: groupNotes[g],
       items: presets.map((p, i) => ({ p, i })).filter((x) => x.p.group === g),
     }));
   }, []);
@@ -145,10 +145,11 @@ function Index() {
         <section className="mb-5 space-y-5">
           {groups.map((g) => (
             <div key={g.name}>
-              <div className="mb-2 flex items-center gap-2">
+              <div className="mb-1 flex items-center gap-2">
                 <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">{g.name}</span>
                 <span className="h-px flex-1 bg-white/10" />
               </div>
+              <p className="mb-2 text-[10px] text-white/30">{g.note}</p>
               <div className="grid grid-cols-2 gap-2">
                 {g.items.map(({ p, i }) => {
                   const active = activePreset === p.name;
@@ -182,10 +183,12 @@ function Index() {
           </button>
           {showAdvanced && (
             <div className="space-y-4 border-t border-white/10 px-4 py-4">
-              <Knob label="Wet / Dry Mix" value={params.wet} min={0} max={1} step={0.01} onChange={(v) => patch({ wet: v })} format={(v) => `${Math.round(v * 100)}%`} />
-              <Knob label="Reverb" value={params.reverb} min={0} max={1} step={0.01} onChange={(v) => patch({ reverb: v })} format={(v) => `${Math.round(v * 100)}%`} />
+              <Knob label="Effect Amount" value={params.wet} min={0} max={1} step={0.01} onChange={(v) => patch({ wet: v })} format={(v) => `${Math.round(v * 100)}%`} />
+              <Knob label="Reverb Level" value={params.reverb} min={0} max={1} step={0.01} onChange={(v) => patch({ reverb: v })} format={(v) => `${Math.round(v * 100)}%`} />
+              <Knob label="Reverb Size" value={params.reverbSize} min={0} max={1} step={0.01} onChange={(v) => patch({ reverbSize: v })} format={(v) => `${Math.round(v * 100)}%`} />
+              <Knob label="Echo Level (0 = off)" value={params.delayMix} min={0} max={1} step={0.01} onChange={(v) => patch({ delayMix: v })} format={(v) => (v === 0 ? "off" : `${Math.round(v * 100)}%`)} />
               <Knob label="Echo Time" value={params.delayTime} min={0} max={1} step={0.005} onChange={(v) => patch({ delayTime: v })} format={(v) => `${Math.round(v * 1000)} ms`} />
-              <Knob label="Echo Feedback" value={params.delayFeedback} min={0} max={0.9} step={0.01} onChange={(v) => patch({ delayFeedback: v })} format={(v) => `${Math.round(v * 100)}%`} />
+              <Knob label="Echo Repeats" value={params.delayFeedback} min={0} max={0.85} step={0.01} onChange={(v) => patch({ delayFeedback: v })} format={(v) => `${Math.round(v * 100)}%`} />
               <Knob label="Distortion" value={params.distortion} min={0} max={1} step={0.01} onChange={(v) => patch({ distortion: v })} format={(v) => `${Math.round(v * 100)}%`} />
               <Knob label="Low-cut (anti-feedback)" value={params.hpf} min={40} max={600} step={5} onChange={(v) => patch({ hpf: v })} format={(v) => `${Math.round(v)} Hz`} />
             </div>
